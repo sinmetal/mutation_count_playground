@@ -1,12 +1,13 @@
 package mutation_count_playground_test
 
 import (
-	"cloud.google.com/go/spanner"
 	"context"
 	"fmt"
-	"github.com/google/uuid"
 	"strings"
 	"testing"
+
+	"cloud.google.com/go/spanner"
+	"github.com/google/uuid"
 )
 
 const Table = "Measure"
@@ -14,7 +15,7 @@ const NoIndexTable = "MeasureNoIndex"
 
 func TestInsert(t *testing.T) {
 	ctx := context.Background()
-	sc := createClient(ctx)
+	sc := createClient(ctx, t)
 
 	empty := make(map[string]interface{})
 	wihtIndex1 := map[string]interface{}{"withIndex1": ""}
@@ -50,7 +51,7 @@ func TestInsert(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mu, err := createInsertMutation(Table, tt.normalColumnCount, tt.addColumn, tt.rowCount)
 			if err != nil {
-				panic(err)
+				t.Fatal(err)
 			}
 			_, err = sc.Apply(ctx, mu)
 			if tt.wantErr {
@@ -93,7 +94,7 @@ func createInsertMutation(table string, normalColumnCount int, addColumn map[str
 
 func TestInsertNoIndexTable(t *testing.T) {
 	ctx := context.Background()
-	sc := createClient(ctx)
+	sc := createClient(ctx, t)
 
 	cases := []struct {
 		name    string
@@ -111,7 +112,7 @@ func TestInsertNoIndexTable(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mu, err := createInsertMutationColCount10(NoIndexTable, tt.count)
 			if err != nil {
-				panic(err)
+				t.Fatal(err)
 			}
 			_, err = sc.Apply(ctx, mu)
 			if tt.wantErr {
@@ -152,7 +153,7 @@ func createInsertMutationColCount10(table string, count int) ([]*spanner.Mutatio
 
 func TestUpdate(t *testing.T) {
 	ctx := context.Background()
-	sc := createClient(ctx)
+	sc := createClient(ctx, t)
 
 	empty := make(map[string]interface{})
 	withIndex1 := map[string]interface{}{"withIndex1": ""}
@@ -196,7 +197,7 @@ func TestUpdate(t *testing.T) {
 				var err error
 				ids, mu, err = createInsertMutationForUpdateTest(Table, tt.rowCount)
 				if err != nil {
-					panic(err)
+					t.Fatal(err)
 				}
 				_, err = sc.Apply(ctx, mu)
 			}
@@ -261,7 +262,7 @@ func createUpdateMutation(t *testing.T, table string, updateIDs []string, normal
 	return list
 }
 
-func createClient(ctx context.Context) *spanner.Client {
+func createClient(ctx context.Context, t *testing.T) *spanner.Client {
 	config := spanner.ClientConfig{
 		NumChannels: 12,
 		SessionPoolConfig: spanner.SessionPoolConfig{
@@ -270,7 +271,7 @@ func createClient(ctx context.Context) *spanner.Client {
 	}
 	dataClient, err := spanner.NewClientWithConfig(ctx, "projects/gcpug-public-spanner/instances/merpay-sponsored-instance/databases/sinmetal", config)
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 
 	return dataClient
