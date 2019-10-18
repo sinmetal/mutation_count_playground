@@ -17,7 +17,6 @@ CREATE TABLE Measure (
     WithIndex2 STRING(MAX),
 ) PRIMARY KEY (ID);
 
-
 CREATE INDEX MeasureWithIndex1_1
 ON Measure (
     WithIndex1
@@ -30,5 +29,5 @@ ON Measure (
 
 CREATE INDEX MeasureWithIndex2_2
 ON Measure (
-    WithIndex2
+    WithIndex2 DESC
 );
