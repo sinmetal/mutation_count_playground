@@ -164,7 +164,7 @@ func TestUpdate(t *testing.T) {
 		name              string
 		normalColumnCount int
 		updateColumn      map[string]interface{}
-		rowCount          int
+		rowCount          int64
 		wantErr           bool
 	}{
 		// WithIndexをすべてNULLにした時、 [1:ID, 2:Arr1, 3:CommitedAt] + normalColumnが 7 つで、10 になる
@@ -220,10 +220,10 @@ func TestUpdate(t *testing.T) {
 
 // createInsertMutationForUpdateTest is Update のTestをする時に先にInsertするためのMutationを作る
 // なるべくLimitに当たらないように更新mutationの数が小さくなるようにしておく
-func createInsertMutationForUpdateTest(table string, rowCount int) ([]string, []*spanner.Mutation, error) {
+func createInsertMutationForUpdateTest(table string, rowCount int64) ([]string, []*spanner.Mutation, error) {
 	var ids = make([]string, rowCount)
 	list := make([]*spanner.Mutation, rowCount)
-	for i := 0; i < rowCount; i++ {
+	for i := int64(0); i < rowCount; i++ {
 		id := uuid.New().String()
 		ids[i] = id
 		v := make(map[string]interface{})
@@ -238,13 +238,13 @@ func createInsertMutationForUpdateTest(table string, rowCount int) ([]string, []
 // createInsertMutation is Insert Mutationを作成する
 // normalColumnCount を指定することで、INDEXが付いていないカラムの数を調整する
 // Measure TableはWithIndex1が1つ, WithIndex2が2つの合計3つのセカンダリインデックスを持ち、INSERT時はセカンダリインデックスを持つカラムがNULLの場合も、セカンダリインデックスがmutationに含まれるので、mutation 数が +3 される
-func createUpdateMutation(t *testing.T, table string, updateIDs []string, normalColumnCount int, updateColumn map[string]interface{}, rowCount int) []*spanner.Mutation {
-	if len(updateIDs) != rowCount {
+func createUpdateMutation(t *testing.T, table string, updateIDs []string, normalColumnCount int, updateColumn map[string]interface{}, rowCount int64) []*spanner.Mutation {
+	if int64(len(updateIDs)) != rowCount {
 		t.Fatalf("updateIDs.length != rowCount !! updateIDs.length=%d, rowCount=%d", len(updateIDs), rowCount)
 	}
 
 	list := make([]*spanner.Mutation, rowCount)
-	for i := 0; i < rowCount; i++ {
+	for i := int64(0); i < rowCount; i++ {
 		v := make(map[string]interface{})
 		v["ID"] = updateIDs[i]
 		for j := 1; j <= normalColumnCount; j++ {
@@ -260,6 +260,126 @@ func createUpdateMutation(t *testing.T, table string, updateIDs []string, normal
 	}
 
 	return list
+}
+
+func TestUpdateDML(t *testing.T) {
+	ctx := context.Background()
+	sc := createClient(ctx, t)
+
+	empty := make(map[string]interface{})
+	withIndex1 := map[string]interface{}{"withIndex1": ""}
+	withIndex2 := map[string]interface{}{"withIndex2": ""}
+	withIndexAll := map[string]interface{}{"withIndex1": "", "withIndex2": ""}
+
+	cases := []struct {
+		name              string
+		normalColumnCount int
+		updateColumn      map[string]interface{}
+		rowCount          int64
+		wantErr           bool
+	}{
+		// WithIndexをすべてNULLにした時、 [1:ID, 2:Arr1, 3:CommitedAt] + normalColumnが 7 つで、10 になる
+		{"empty : 7-2000", 7, empty, 2000, false},
+		{"empty : 7-2001", 7, empty, 2001, true},
+
+		// WithIndex1に値を入れて、WithIndex2をNULLにした時、 [1:ID, 2:Arr1, 3:CommitedAt, 4:WithIndex1, 5:MeasureWithIndex1_1, 6:?] + normalColumnが 4 つで、10 になる
+		{"withIndex1 : 4-2000", 4, withIndex1, 2000, false},
+		{"withIndex1 : 4-2001", 4, withIndex1, 2001, true},
+
+		// WithIndex2に値を入れて、WithIndex1をNULLにした時、[1:ID, 2:Arr1, 3:CommitedAt, 4:WithIndex2, 5:MeasureWithIndex2_1, 6:MeasureWithIndex2_2, 7:?, 8:?] + normalColumnが 2 つで、10 になる
+		{"withIndex2 : 2-2000", 2, withIndex2, 2000, false},
+		{"withIndex2 : 2-2001", 2, withIndex2, 2001, true},
+
+		// WithIndex1とWitnIndex2に値を入れた時、 [1:ID, 2:Arr1, 3:CommitedAt, 4:WithIndex1, 5:WithIndex2, 6:MeasureWithIndex1_1, 7:MeasureWithIndex2_1, 8:MeasureWithIndex2_2, 9:?, 10:?, 11:?] + normalColumnが 0 つで、11 になる
+		{"withIndexAll : 0-1500", 0, withIndexAll, 1500, false},
+		{"withIndexAll : 0-1600", 0, withIndexAll, 1600, false},
+		{"withIndexAll : 0-1700", 0, withIndexAll, 1700, false},
+		{"withIndexAll : 0-1818", 0, withIndexAll, 1818, false},
+		{"withIndexAll : 0-1819", 0, withIndexAll, 1819, true},
+	}
+
+	for _, tt := range cases {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			mark := uuid.New().String()
+			{
+				// UPDATEするために先にINSERTする
+				var mu []*spanner.Mutation
+				var err error
+				_, mu, err = createInsertMutationForUpdateDMLTest(Table, mark, tt.rowCount)
+				if err != nil {
+					t.Fatal(err)
+				}
+				_, err = sc.Apply(ctx, mu)
+			}
+
+			sql := createUpdateDML(mark, tt.normalColumnCount, tt.updateColumn)
+			_, err := sc.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
+				_, err := txn.Update(ctx, spanner.NewStatement(sql))
+				if err != nil {
+					return err
+				}
+
+				return nil
+			})
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("want err but got err is nil")
+				} else if !strings.Contains(err.Error(), "The transaction contains too many mutations") {
+					t.Errorf("error.err=%+v", err)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("error.err=%+v", err)
+				}
+			}
+		})
+	}
+}
+
+// createInsertMutationForUpdateDMLTest is Update のTestをする時に先にInsertするためのMutationを作る
+// なるべくLimitに当たらないように更新mutationの数が小さくなるようにしておく
+func createInsertMutationForUpdateDMLTest(table string, mark string, rowCount int64) ([]string, []*spanner.Mutation, error) {
+	var ids = make([]string, rowCount)
+	list := make([]*spanner.Mutation, rowCount)
+	for i := int64(0); i < rowCount; i++ {
+		id := uuid.New().String()
+		ids[i] = id
+		v := make(map[string]interface{})
+		v["ID"] = id
+		v["Mark"] = mark
+		v["CommitedAt"] = spanner.CommitTimestamp
+		list[i] = spanner.InsertMap(table, v)
+	}
+
+	return ids, list, nil
+}
+
+func TestCreateUpdateDML(t *testing.T) {
+	normalColumnCount := 3
+	updateColumns := map[string]interface{}{"withIndex1": "", "withIndex2": ""}
+
+	sql := createUpdateDML("hoge", normalColumnCount, updateColumns)
+	fmt.Println(sql)
+}
+
+func createUpdateDML(mark string, normalColumnCount int, updateColumn map[string]interface{}) string {
+	var sql = fmt.Sprintf("UPDATE %s ", Table)
+	sql += "SET "
+	var sqlSets []string
+	sqlSets = append(sqlSets, "Arr1 = []")
+	sqlSets = append(sqlSets, `CommitedAt = "2019-01-01 10:00:00"`)
+	for j := 1; j <= normalColumnCount; j++ {
+		sqlSets = append(sqlSets, fmt.Sprintf(`Col%d = ""`, j))
+	}
+	for k, v := range updateColumn {
+		sqlSets = append(sqlSets, fmt.Sprintf(`%s = "%v"`, k, v))
+	}
+	sql += strings.Join(sqlSets, ",")
+
+	sql += fmt.Sprintf(` WHERE Mark = "%s"`, mark)
+
+	return sql
 }
 
 func createClient(ctx context.Context, t *testing.T) *spanner.Client {

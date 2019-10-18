@@ -1,6 +1,7 @@
 CREATE TABLE Measure (
     ID STRING(MAX) NOT NULL,
     Arr1 ARRAY<STRING(MAX)>,
+    Mark STRING(MAX),
     Col1 STRING(MAX),
     Col2 STRING(MAX),
     Col3 STRING(MAX),
