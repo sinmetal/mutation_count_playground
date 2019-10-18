@@ -10,11 +10,9 @@ CREATE TABLE Measure (
     Col7 STRING(MAX),
     Col8 STRING(MAX),
     Col9 STRING(MAX),
-    CommitedAt TIMESTAMP OPTIONS (allow_commit_timestamp=true),
-    CreatedAt TIMESTAMP,
-    UpdatedAt TIMESTAMP,
     WithIndex1 STRING(MAX),
     WithIndex2 STRING(MAX),
+    CommitedAt TIMESTAMP OPTIONS (allow_commit_timestamp=true),
 ) PRIMARY KEY (ID);
 
 CREATE INDEX MeasureWithIndex1_1

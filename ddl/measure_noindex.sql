@@ -11,6 +11,4 @@ CREATE TABLE MeasureNoIndex (
     Col8 STRING(MAX),
     Col9 STRING(MAX),
     CommitedAt TIMESTAMP OPTIONS (allow_commit_timestamp=true),
-    CreatedAt TIMESTAMP,
-    UpdatedAt TIMESTAMP,
 ) PRIMARY KEY (ID);
