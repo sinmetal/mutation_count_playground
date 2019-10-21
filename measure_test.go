@@ -382,6 +382,118 @@ func createUpdateDML(mark string, normalColumnCount int, updateColumn map[string
 	return sql
 }
 
+func TestMeasure_Delete(t *testing.T) {
+	ctx := context.Background()
+	sc := createClient(ctx, t)
+
+	empty := make(map[string]interface{})
+	withIndex1 := map[string]interface{}{"withIndex1": ""}
+	withIndex2 := map[string]interface{}{"withIndex2": ""}
+	withIndexAll := map[string]interface{}{"withIndex1": "", "withIndex2": ""}
+
+	cases := []struct {
+		name              string
+		normalColumnCount int
+		updateColumn      map[string]interface{}
+		rowCount          int64
+		wantErr           bool
+	}{
+		// WithIndexをすべてNULLにした時、[1:Measure Table , 2:MeasureWithIndex1_1 INDEX Table, 3:MeasureWithIndex2_1 INDEX Table, 4:MeasureWithIndex2_2]で、 4 になる
+		{"empty : 7-2000", 7, empty, 2000, false},
+		{"empty : 7-5000", 7, empty, 5000, false},
+		{"empty : 7-5001", 7, empty, 5001, true},
+
+		// WithIndex1に値を入れて、WithIndex2をNULLにした時、[1:Measure Table , 2:MeasureWithIndex1_1 INDEX Table, 3:MeasureWithIndex2_1 INDEX Table, 4:MeasureWithIndex2_2]で、 4 になる
+		{"withIndex1 : 4-5000", 4, withIndex1, 5000, false},
+		{"withIndex1 : 4-5001", 4, withIndex1, 5001, true},
+
+		// WithIndex2に値を入れて、WithIndex1をNULLにした時、[1:Measure Table , 2:MeasureWithIndex1_1 INDEX Table, 3:MeasureWithIndex2_1 INDEX Table, 4:MeasureWithIndex2_2]で、 4 になる
+		{"withIndex2 : 2-5000", 2, withIndex2, 5000, false},
+		{"withIndex2 : 2-5001", 2, withIndex2, 5001, true},
+
+		// WithIndex1とWitnIndex2に値を入れた時、[1:Measure Table , 2:MeasureWithIndex1_1 INDEX Table, 3:MeasureWithIndex2_1 INDEX Table, 4:MeasureWithIndex2_2]で、 4 になる
+		{"withIndexAll : 0-5000", 0, withIndexAll, 5000, false},
+		{"withIndexAll : 0-5001", 0, withIndexAll, 5001, true},
+	}
+
+	for _, tt := range cases {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			var ids []string
+			{
+				// DELETEするために先にINSERTする
+				var mus []*spanner.Mutation
+				for i := int64(0); i < tt.rowCount; i++ {
+					id, mu, err := createInsertMutationForDeleteTest(Table, tt.normalColumnCount, tt.updateColumn)
+					if err != nil {
+						t.Fatal(err)
+					}
+					ids = append(ids, id)
+					mus = append(mus, mu)
+					if len(mus) > 100 {
+						_, err = sc.Apply(ctx, mus)
+						if err != nil {
+							t.Fatal("failed Insert...", err)
+						}
+						mus = []*spanner.Mutation{}
+					}
+				}
+				if len(mus) > 0 {
+					_, err := sc.Apply(ctx, mus)
+					if err != nil {
+						t.Fatal("failed Insert...", err)
+					}
+				}
+			}
+			mu := createDeleteMutation(t, Table, ids, tt.rowCount)
+			_, err := sc.Apply(ctx, mu)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("want err but got err is nil")
+				} else if !strings.Contains(err.Error(), "The transaction contains too many mutations") {
+					t.Errorf("error.err=%+v", err)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("error.err=%+v", err)
+				}
+			}
+		})
+	}
+}
+
+// createInsertMutationForDeleteTest is Delete のTestをする時に先にInsertするためのMutationを作る
+func createInsertMutationForDeleteTest(table string, normalColumnCount int, insertColumn map[string]interface{}) (string, *spanner.Mutation, error) {
+	id := uuid.New().String()
+	v := make(map[string]interface{})
+	v["ID"] = id
+	v["CommitedAt"] = spanner.CommitTimestamp
+	for j := 1; j <= normalColumnCount; j++ {
+		v[fmt.Sprintf("Col%d", j)] = ""
+	}
+
+	for insertKey, insertValue := range insertColumn {
+		v[insertKey] = insertValue
+	}
+	mu := spanner.InsertMap(table, v)
+
+	return id, mu, nil
+}
+
+// createDeleteMutation is Delete Mutationを作成する
+func createDeleteMutation(t *testing.T, table string, deleteIDs []string, rowCount int64) []*spanner.Mutation {
+	if int64(len(deleteIDs)) != rowCount {
+		t.Fatalf("updateIDs.length != rowCount !! updateIDs.length=%d, rowCount=%d", len(deleteIDs), rowCount)
+	}
+
+	list := make([]*spanner.Mutation, rowCount)
+	for i := int64(0); i < rowCount; i++ {
+		list[i] = spanner.Delete(table, spanner.Key{deleteIDs[i]})
+	}
+
+	return list
+}
+
 func createClient(ctx context.Context, t *testing.T) *spanner.Client {
 	config := spanner.ClientConfig{
 		NumChannels: 12,
