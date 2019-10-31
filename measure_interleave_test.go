@@ -27,7 +27,7 @@ func TestMeasureInterleave_Insert(t *testing.T) {
 		wantErr           bool
 	}{
 		// Parent: [1:ID, 2:Arr1, 3:CommitedAt] + normalColumnが 7 つで、10 になる
-		// Child: [1:ID, 2:ChildID, 3:Arr1, 4:CommitedAt] + normalColumnが 7 つで、10 になる
+		// Child: [1:ID, 2:ChildID, 3:Arr1, 4:CommitedAt, 5:With_Index] + normalColumnが 7 つで、10 になる
 		{"empty : 7-1000", 7, empty, 1000, false},
 		{"empty : 7-1001", 7, empty, 1001, true},
 	}
@@ -94,7 +94,7 @@ func createInterleaveParentInsertMutation(normalColumnCount int, addColumn map[s
 }
 
 func createInterleaveChildInsertMutation(parentID string, normalColumnCount int, addColumn map[string]interface{}) (*spanner.Mutation, error) {
-	ncc := normalColumnCount - 1 // Parent.IDが増えてるので、1つ減らす
+	ncc := normalColumnCount - 2 // Parent.ID, With_Index1が増えてるので、2つ減らす
 	if ncc < 0 {
 		return nil, fmt.Errorf("invalid argument. plz normalColumnCount > 0")
 	}

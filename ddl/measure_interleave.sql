@@ -35,3 +35,8 @@ CREATE TABLE MeasureChild (
     CommitedAt TIMESTAMP OPTIONS (allow_commit_timestamp=true),
 ) PRIMARY KEY (ID, ChildID),
   INTERLEAVE IN PARENT MeasureParent ON DELETE CASCADE;
+
+CREATE INDEX MeasureChildWithIndex1_1
+ON MeasureChild (
+    WithIndex1
+);
