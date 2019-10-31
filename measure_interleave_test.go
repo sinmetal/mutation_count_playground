@@ -128,7 +128,7 @@ func TestMeasureInterleave_Delete(t *testing.T) {
 		rowCount          int64
 		wantErr           bool
 	}{
-		// [1:MeasureParent Table]で、 1 になる
+		// [1:MeasureParent Table]で、1 になる
 		{"empty : 7-20000", 7, empty, 20000, false},
 		{"empty : 7-20001", 7, empty, 20001, true},
 	}

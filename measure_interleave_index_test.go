@@ -128,7 +128,7 @@ func TestMeasureInterleaveWithIndex_Delete(t *testing.T) {
 		rowCount          int64
 		wantErr           bool
 	}{
-		// WithIndexをすべてNULLにした時、[1:MeasureParent Table ,3:MeasureChildWithIndex1_1 INDEX Table]で、 2 になる
+		// [1:MeasureParent Table ,2:MeasureChildWithIndex1_1 INDEX Table]で、 2 になる
 		{"empty : 7-10000", 7, empty, 10000, false},
 		{"empty : 7-10001", 7, empty, 10001, true},
 	}
