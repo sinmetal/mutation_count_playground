@@ -445,7 +445,7 @@ func TestMeasure_Delete(t *testing.T) {
 					}
 				}
 			}
-			mu := createDeleteMutation(t, Table, ids, tt.rowCount)
+			mu := createDeleteMutation(t, Table, ids)
 			_, err := sc.Apply(ctx, mu)
 			if tt.wantErr {
 				if err == nil {
@@ -481,14 +481,20 @@ func createInsertMutationForDeleteTest(table string, normalColumnCount int, inse
 }
 
 // createDeleteMutation is Delete Mutationを作成する
-func createDeleteMutation(t *testing.T, table string, deleteIDs []string, rowCount int64) []*spanner.Mutation {
-	if int64(len(deleteIDs)) != rowCount {
-		t.Fatalf("updateIDs.length != rowCount !! updateIDs.length=%d, rowCount=%d", len(deleteIDs), rowCount)
+func createDeleteMutation(t *testing.T, table string, deleteIDs []string) []*spanner.Mutation {
+	list := make([]*spanner.Mutation, len(deleteIDs))
+	for i, v := range deleteIDs {
+		list[i] = spanner.Delete(table, spanner.Key{v})
 	}
 
-	list := make([]*spanner.Mutation, rowCount)
-	for i := int64(0); i < rowCount; i++ {
-		list[i] = spanner.Delete(table, spanner.Key{deleteIDs[i]})
+	return list
+}
+
+// createDeleteMutationByKey is Delete Mutationを作成する
+func createDeleteMutationByKey(t *testing.T, table string, deleteKeys []*spanner.Key) []*spanner.Mutation {
+	list := make([]*spanner.Mutation, len(deleteKeys))
+	for i, v := range deleteKeys {
+		list[i] = spanner.Delete(table, v)
 	}
 
 	return list

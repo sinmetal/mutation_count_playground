@@ -167,7 +167,7 @@ func TestMeasureInterleave_Delete(t *testing.T) {
 					}
 				}
 			}
-			mu := createDeleteMutation(t, InterleaveParentTable, ids, tt.rowCount)
+			mu := createDeleteMutation(t, InterleaveParentTable, ids)
 			_, err := sc.Apply(ctx, mu)
 			if tt.wantErr {
 				if err == nil {

@@ -10,10 +10,10 @@ import (
 	"github.com/google/uuid"
 )
 
-const InterleaveParentWithIndexTable = "MeasureParentWithIndex"
-const InterleaveChildWithIndexTable = "MeasureChildWithIndex"
+const InterleaveParentNoCascadeTable = "MeasureParentNoCascade"
+const InterleaveChildNoCascadeTable = "MeasureChildNoCascade"
 
-func TestMeasureInterleaveWithIndex_Insert(t *testing.T) {
+func TestMeasureInterleaveNoCascade_Insert(t *testing.T) {
 	ctx := context.Background()
 	sc := createClient(ctx, t)
 
@@ -27,7 +27,7 @@ func TestMeasureInterleaveWithIndex_Insert(t *testing.T) {
 		wantErr           bool
 	}{
 		// Parent: [1:ID, 2:Arr1, 3:CommitedAt] + normalColumnが 7 つで、10 になる
-		// Child: [1:ID, 2:ChildID, 3:Arr1, 4:CommitedAt, 5:With_Index1] + normalColumnが 7 - 2 つで、10 になる
+		// Child: [1:ID, 2:ChildID, 3:Arr1, 4:CommitedAt] + normalColumnが 7 - 1 つで、10 になる
 		{"empty : 7-1000", 7, empty, 1000, false},
 		{"empty : 7-1001", 7, empty, 1001, true},
 	}
@@ -35,7 +35,7 @@ func TestMeasureInterleaveWithIndex_Insert(t *testing.T) {
 	for _, tt := range cases {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			mu, err := createInterleaveWithIndexInsertMutations(tt.normalColumnCount, tt.addColumn, tt.rowCount)
+			mu, err := createInterleaveNoCascadeInsertMutations(tt.normalColumnCount, tt.addColumn, tt.rowCount)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -55,10 +55,10 @@ func TestMeasureInterleaveWithIndex_Insert(t *testing.T) {
 	}
 }
 
-// createInterleaveWithIndexInsertMutations is Interleave Table の Insert Mutationを作成する
+// createInterleaveNoCascadeInsertMutations is Interleave Table の Insert Mutationを作成する
 // 親と子を1:1で作るので、rowCount * 2 の数が返ってくる
 // normalColumnCount を指定することで、INDEXが付いていないカラムの数を調整する
-func createInterleaveWithIndexInsertMutations(normalColumnCount int, addColumn map[string]interface{}, rowCount int) ([]*spanner.Mutation, error) {
+func createInterleaveNoCascadeInsertMutations(normalColumnCount int, addColumn map[string]interface{}, rowCount int) ([]*spanner.Mutation, error) {
 	var list []*spanner.Mutation
 	for i := 0; i < rowCount; i++ {
 		parentID, parentMu, err := createInterleaveParentInsertMutation(normalColumnCount, addColumn)
@@ -76,7 +76,7 @@ func createInterleaveWithIndexInsertMutations(normalColumnCount int, addColumn m
 	return list, nil
 }
 
-func createInterleaveWithIndexParentInsertMutation(normalColumnCount int, addColumn map[string]interface{}) (string, *spanner.Mutation, error) {
+func createInterleaveNoCascadeParentInsertMutation(normalColumnCount int, addColumn map[string]interface{}) (string, *spanner.Mutation, error) {
 	v := make(map[string]interface{})
 	id := uuid.New().String()
 	v["ID"] = id
@@ -89,13 +89,13 @@ func createInterleaveWithIndexParentInsertMutation(normalColumnCount int, addCol
 	}
 	v["Arr1"] = []string{}
 	v["CommitedAt"] = spanner.CommitTimestamp
-	return id, spanner.InsertMap(InterleaveParentWithIndexTable, v), nil
+	return id, spanner.InsertMap(InterleaveParentNoCascadeTable, v), nil
 }
 
-func createInterleaveWithIndexChildInsertMutation(parentID string, normalColumnCount int, addColumn map[string]interface{}) (*spanner.Mutation, error) {
-	ncc := normalColumnCount - 2 // Parent.ID, With_Index1が増えてるので、2つ減らす
+func createInterleaveNoCascadeChildInsertMutation(parentID string, normalColumnCount int, addColumn map[string]interface{}) (string, *spanner.Mutation, error) {
+	ncc := normalColumnCount - 1 // Parent.IDが増えてるので、1つ減らす
 	if ncc < 0 {
-		return nil, fmt.Errorf("invalid argument. plz normalColumnCount > 0")
+		return "", nil, fmt.Errorf("invalid argument. plz normalColumnCount > 0")
 	}
 
 	v := make(map[string]interface{})
@@ -111,10 +111,10 @@ func createInterleaveWithIndexChildInsertMutation(parentID string, normalColumnC
 	}
 	v["Arr1"] = []string{}
 	v["CommitedAt"] = spanner.CommitTimestamp
-	return spanner.InsertMap(InterleaveChildWithIndexTable, v), nil
+	return id, spanner.InsertMap(InterleaveChildNoCascadeTable, v), nil
 }
 
-func TestMeasureInterleaveWithIndex_Delete(t *testing.T) {
+func TestMeasureInterleaveNoCascade_Delete(t *testing.T) {
 	ctx := context.Background()
 	sc := createClient(ctx, t)
 
@@ -127,7 +127,7 @@ func TestMeasureInterleaveWithIndex_Delete(t *testing.T) {
 		rowCount          int64
 		wantErr           bool
 	}{
-		// [1:MeasureParent Table ,2:MeasureChildWithIndex1_1 INDEX Table]で、 2 になる
+		// [1:MeasureParentNoCascade Table ,2:MeasureChildNoCascade Table]で、 2 になる
 		{"empty : 7-10000", 7, empty, 10000, false},
 		{"empty : 7-10001", 7, empty, 10001, true},
 	}
@@ -135,20 +135,22 @@ func TestMeasureInterleaveWithIndex_Delete(t *testing.T) {
 	for _, tt := range cases {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			var ids []string
+			var parentIDs []string
+			var childKeys []*spanner.Key
 			{
 				// DELETEするために先にINSERTする
 				var mus []*spanner.Mutation
 				for i := int64(0); i < tt.rowCount; i++ {
-					parentID, parentMu, err := createInterleaveWithIndexParentInsertMutation(tt.normalColumnCount, tt.updateColumn)
+					parentID, parentMu, err := createInterleaveNoCascadeParentInsertMutation(tt.normalColumnCount, tt.updateColumn)
 					if err != nil {
 						t.Fatal(err)
 					}
-					childMu, err := createInterleaveWithIndexChildInsertMutation(parentID, tt.normalColumnCount, tt.updateColumn)
+					childID, childMu, err := createInterleaveNoCascadeChildInsertMutation(parentID, tt.normalColumnCount, tt.updateColumn)
 					if err != nil {
 						t.Fatal(err)
 					}
-					ids = append(ids, parentID)
+					parentIDs = append(parentIDs, parentID)
+					childKeys = append(childKeys, &spanner.Key{parentID, childID})
 					mus = append(mus, parentMu)
 					mus = append(mus, childMu)
 					if len(mus) > 100 {
@@ -166,7 +168,9 @@ func TestMeasureInterleaveWithIndex_Delete(t *testing.T) {
 					}
 				}
 			}
-			mu := createDeleteMutation(t, InterleaveParentWithIndexTable, ids)
+			var mu []*spanner.Mutation
+			mu = append(mu, createDeleteMutationByKey(t, InterleaveChildNoCascadeTable, childKeys)...)
+			mu = append(mu, createDeleteMutation(t, InterleaveParentNoCascadeTable, parentIDs)...)
 			_, err := sc.Apply(ctx, mu)
 			if tt.wantErr {
 				if err == nil {
