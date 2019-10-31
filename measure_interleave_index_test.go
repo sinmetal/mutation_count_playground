@@ -10,10 +10,10 @@ import (
 	"github.com/google/uuid"
 )
 
-const InterleaveParentTable = "MeasureParent"
-const InterleaveChildTable = "MeasureChild"
+const InterleaveParentWithIndexTable = "MeasureParentWithIndex"
+const InterleaveChildWithIndexTable = "MeasureChildWithIndex"
 
-func TestMeasureInterleave_Insert(t *testing.T) {
+func TestMeasureInterleaveWithIndex_Insert(t *testing.T) {
 	ctx := context.Background()
 	sc := createClient(ctx, t)
 
@@ -27,7 +27,7 @@ func TestMeasureInterleave_Insert(t *testing.T) {
 		wantErr           bool
 	}{
 		// Parent: [1:ID, 2:Arr1, 3:CommitedAt] + normalColumnが 7 つで、10 になる
-		// Child: [1:ID, 2:ChildID, 3:Arr1, 4:CommitedAt] + normalColumnが 7 - 1 つで、10 になる
+		// Child: [1:ID, 2:ChildID, 3:Arr1, 4:CommitedAt, 5:With_Index1] + normalColumnが 7 - 2 つで、10 になる
 		{"empty : 7-1000", 7, empty, 1000, false},
 		{"empty : 7-1001", 7, empty, 1001, true},
 	}
@@ -35,7 +35,7 @@ func TestMeasureInterleave_Insert(t *testing.T) {
 	for _, tt := range cases {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			mu, err := createInterleaveInsertMutations(tt.normalColumnCount, tt.addColumn, tt.rowCount)
+			mu, err := createInterleaveWithIndexInsertMutations(tt.normalColumnCount, tt.addColumn, tt.rowCount)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -55,11 +55,11 @@ func TestMeasureInterleave_Insert(t *testing.T) {
 	}
 }
 
-// createInterleaveInsertMutations is Interleave Table の Insert Mutationを作成する
+// createInterleaveWithIndexInsertMutations is Interleave Table の Insert Mutationを作成する
 // 親と子を1:1で作るので、rowCount * 2 の数が返ってくる
 // normalColumnCount を指定することで、INDEXが付いていないカラムの数を調整する
 // Measure TableはWithIndex1が1つ, WithIndex2が2つの合計3つのセカンダリインデックスを持ち、INSERT時はセカンダリインデックスを持つカラムがNULLの場合も、セカンダリインデックスがmutationに含まれるので、mutation 数が +3 される
-func createInterleaveInsertMutations(normalColumnCount int, addColumn map[string]interface{}, rowCount int) ([]*spanner.Mutation, error) {
+func createInterleaveWithIndexInsertMutations(normalColumnCount int, addColumn map[string]interface{}, rowCount int) ([]*spanner.Mutation, error) {
 	var list []*spanner.Mutation
 	for i := 0; i < rowCount; i++ {
 		parentID, parentMu, err := createInterleaveParentInsertMutation(normalColumnCount, addColumn)
@@ -77,7 +77,7 @@ func createInterleaveInsertMutations(normalColumnCount int, addColumn map[string
 	return list, nil
 }
 
-func createInterleaveParentInsertMutation(normalColumnCount int, addColumn map[string]interface{}) (string, *spanner.Mutation, error) {
+func createInterleaveWithIndexParentInsertMutation(normalColumnCount int, addColumn map[string]interface{}) (string, *spanner.Mutation, error) {
 	v := make(map[string]interface{})
 	id := uuid.New().String()
 	v["ID"] = id
@@ -90,11 +90,11 @@ func createInterleaveParentInsertMutation(normalColumnCount int, addColumn map[s
 	}
 	v["Arr1"] = []string{}
 	v["CommitedAt"] = spanner.CommitTimestamp
-	return id, spanner.InsertMap(InterleaveParentTable, v), nil
+	return id, spanner.InsertMap(InterleaveParentWithIndexTable, v), nil
 }
 
-func createInterleaveChildInsertMutation(parentID string, normalColumnCount int, addColumn map[string]interface{}) (*spanner.Mutation, error) {
-	ncc := normalColumnCount - 1 // Parent.IDが増えてるので、1つ減らす
+func createInterleaveWithIndexChildInsertMutation(parentID string, normalColumnCount int, addColumn map[string]interface{}) (*spanner.Mutation, error) {
+	ncc := normalColumnCount - 2 // Parent.ID, With_Index1が増えてるので、2つ減らす
 	if ncc < 0 {
 		return nil, fmt.Errorf("invalid argument. plz normalColumnCount > 0")
 	}
@@ -112,10 +112,10 @@ func createInterleaveChildInsertMutation(parentID string, normalColumnCount int,
 	}
 	v["Arr1"] = []string{}
 	v["CommitedAt"] = spanner.CommitTimestamp
-	return spanner.InsertMap(InterleaveChildTable, v), nil
+	return spanner.InsertMap(InterleaveChildWithIndexTable, v), nil
 }
 
-func TestMeasureInterleave_Delete(t *testing.T) {
+func TestMeasureInterleaveWithIndex_Delete(t *testing.T) {
 	ctx := context.Background()
 	sc := createClient(ctx, t)
 
@@ -128,9 +128,9 @@ func TestMeasureInterleave_Delete(t *testing.T) {
 		rowCount          int64
 		wantErr           bool
 	}{
-		// [1:MeasureParent Table]で、 1 になる
-		{"empty : 7-20000", 7, empty, 20000, false},
-		{"empty : 7-20001", 7, empty, 20001, true},
+		// WithIndexをすべてNULLにした時、[1:MeasureParent Table ,3:MeasureChildWithIndex1_1 INDEX Table]で、 2 になる
+		{"empty : 7-10000", 7, empty, 10000, false},
+		{"empty : 7-10001", 7, empty, 10001, true},
 	}
 
 	for _, tt := range cases {
@@ -141,11 +141,11 @@ func TestMeasureInterleave_Delete(t *testing.T) {
 				// DELETEするために先にINSERTする
 				var mus []*spanner.Mutation
 				for i := int64(0); i < tt.rowCount; i++ {
-					parentID, parentMu, err := createInterleaveParentInsertMutation(tt.normalColumnCount, tt.updateColumn)
+					parentID, parentMu, err := createInterleaveWithIndexParentInsertMutation(tt.normalColumnCount, tt.updateColumn)
 					if err != nil {
 						t.Fatal(err)
 					}
-					childMu, err := createInterleaveChildInsertMutation(parentID, tt.normalColumnCount, tt.updateColumn)
+					childMu, err := createInterleaveWithIndexChildInsertMutation(parentID, tt.normalColumnCount, tt.updateColumn)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -167,7 +167,7 @@ func TestMeasureInterleave_Delete(t *testing.T) {
 					}
 				}
 			}
-			mu := createDeleteMutation(t, InterleaveParentTable, ids, tt.rowCount)
+			mu := createDeleteMutation(t, InterleaveParentWithIndexTable, ids, tt.rowCount)
 			_, err := sc.Apply(ctx, mu)
 			if tt.wantErr {
 				if err == nil {

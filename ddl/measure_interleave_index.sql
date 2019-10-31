@@ -1,4 +1,4 @@
-CREATE TABLE MeasureParent (
+CREATE TABLE MeasureParentWithIndex (
     ID STRING(MAX) NOT NULL,
     Arr1 ARRAY<STRING(MAX)>,
     Mark STRING(MAX),
@@ -16,7 +16,7 @@ CREATE TABLE MeasureParent (
     CommitedAt TIMESTAMP OPTIONS (allow_commit_timestamp=true),
 ) PRIMARY KEY (ID);
 
-CREATE TABLE MeasureChild (
+CREATE TABLE MeasureChildWithIndex (
     ID STRING(MAX) NOT NULL,
     ChildID STRING(MAX) NOT NULL,
     Arr1 ARRAY<STRING(MAX)>,
@@ -34,4 +34,9 @@ CREATE TABLE MeasureChild (
     WithIndex2 STRING(MAX),
     CommitedAt TIMESTAMP OPTIONS (allow_commit_timestamp=true),
 ) PRIMARY KEY (ID, ChildID),
-  INTERLEAVE IN PARENT MeasureParent ON DELETE CASCADE;
+  INTERLEAVE IN PARENT MeasureParentWithIndex ON DELETE CASCADE;
+
+CREATE INDEX MeasureChildWithIndexWithIndex1_1
+ON MeasureChildWithIndex (
+    WithIndex1
+);
