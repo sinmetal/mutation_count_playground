@@ -11,8 +11,6 @@ CREATE TABLE MeasureParentWithIndex (
     Col7 STRING(MAX),
     Col8 STRING(MAX),
     Col9 STRING(MAX),
-    WithIndex1 STRING(MAX),
-    WithIndex2 STRING(MAX),
     CommitedAt TIMESTAMP OPTIONS (allow_commit_timestamp=true),
 ) PRIMARY KEY (ID);
 
@@ -31,7 +29,6 @@ CREATE TABLE MeasureChildWithIndex (
     Col8 STRING(MAX),
     Col9 STRING(MAX),
     WithIndex1 STRING(MAX),
-    WithIndex2 STRING(MAX),
     CommitedAt TIMESTAMP OPTIONS (allow_commit_timestamp=true),
 ) PRIMARY KEY (ID, ChildID),
   INTERLEAVE IN PARENT MeasureParentWithIndex ON DELETE CASCADE;
