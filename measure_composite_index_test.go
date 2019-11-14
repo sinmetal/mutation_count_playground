@@ -61,7 +61,9 @@ func TestMeasureCompositeIndex_Update(t *testing.T) {
 	sc := createClient(ctx, t)
 
 	empty := make(map[string]interface{})
-	withCompositeIndex := map[string]interface{}{"WithCompositeIndex1": "", "WithCompositeIndex2": ""}
+	withCompositeIndex1 := map[string]interface{}{"WithCompositeIndex1": ""}
+	withCompositeIndex2 := map[string]interface{}{"WithCompositeIndex2": ""}
+	withCompositeIndexAll := map[string]interface{}{"WithCompositeIndex1": "", "WithCompositeIndex2": ""}
 
 	cases := []struct {
 		name              string
@@ -74,9 +76,17 @@ func TestMeasureCompositeIndex_Update(t *testing.T) {
 		{"empty : 7-2000", 7, empty, 2000, false},
 		{"empty : 7-2001", 7, empty, 2001, true},
 
-		// WithIndex1に値を入れて、WithIndex2をNULLにした時、 [1:ID, 2:Arr1, 3:CommitedAt, 4:WithCompositeIndex1, , 5:WithCompositeIndex2, 6:MeasureCompositeIndexWithCompositeIndex, 7:?] + normalColumnが 3 つで、10 になる
-		{"withIndex1 : 3-2000", 3, withCompositeIndex, 2000, false},
-		{"withIndex1 : 3-2001", 3, withCompositeIndex, 2001, true},
+		// withCompositeIndex1,WithCompositeIndex2 に値を入れた時、 [1:ID, 2:Arr1, 3:CommitedAt, 4:WithCompositeIndex1, , 5:WithCompositeIndex2, 6:MeasureCompositeIndexWithCompositeIndex * 2] + normalColumnが 3 つで、10 になる
+		{"withCompositeIndex : 3-2000", 3, withCompositeIndexAll, 2000, false},
+		{"withCompositeIndex : 3-2001", 3, withCompositeIndexAll, 2001, true},
+
+		// withCompositeIndex1だけに値を入れた時、 [1:ID, 2:Arr1, 3:CommitedAt, 4:WithCompositeIndex1, 5:MeasureCompositeIndexWithCompositeIndex * 2] + normalColumnが 4 つで、10 になる
+		{"withCompositeIndex1 : 4-2000", 4, withCompositeIndex1, 2000, false},
+		{"withCompositeIndex1 : 4-2001", 4, withCompositeIndex1, 2001, true},
+
+		// withCompositeIndex2だけに値を入れた時、 [1:ID, 2:Arr1, 3:CommitedAt, 4:WithCompositeIndex2, 5:MeasureCompositeIndexWithCompositeIndex * 2] + normalColumnが 4 つで、10 になる
+		{"withCompositeIndex2 : 4-2000", 4, withCompositeIndex2, 2000, false},
+		{"withCompositeIndex2 : 4-2001", 4, withCompositeIndex2, 2001, true},
 	}
 
 	for _, tt := range cases {
