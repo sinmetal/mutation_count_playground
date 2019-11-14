@@ -72,6 +72,8 @@ func TestMeasureStoringIndex_Update(t *testing.T) {
 
 	empty := make(map[string]interface{})
 	withStoringIndex := map[string]interface{}{"WithIndex1": ""}
+	withStoringColumn1 := map[string]interface{}{"Storing1": ""}
+	withStoringColumn2 := map[string]interface{}{"Storing2": ""}
 
 	cases := []struct {
 		name              string
@@ -87,6 +89,14 @@ func TestMeasureStoringIndex_Update(t *testing.T) {
 		// WithIndex1に値を入れて、WithIndex2をNULLにした時、 [1:ID, 2:Arr1, 3:CommitedAt, 4:WithStoringIndex1, , 5:WithStoringIndex2, 6:MeasureStoringIndexWithStoringIndex * 2] + normalColumnが 3 つで、10 になる
 		{"withIndex1 : 3-2000", 3, withStoringIndex, 2000, false},
 		{"withIndex1 : 3-2001", 3, withStoringIndex, 2001, true},
+
+		// withStoringColumn1に値を入れた時、 [1:ID, 2:Arr1, 3:CommitedAt, 4:Storing1, 5:MeasureWithStoringWithIndex1_1 * 2, 7:MeasureWithStoringWithIndex2_1 * 2] + normalColumnが 2 つで、10 になる
+		{"withStoringColumn1 : 2-2000", 2, withStoringColumn1, 2000, false},
+		{"withStoringColumn1 : 2-2001", 2, withStoringColumn1, 2001, true},
+
+		// withStoringColumn2に値を入れた時、 [1:ID, 2:Arr1, 3:CommitedAt, 4:Storing2, 5:MeasureWithStoringWithIndex2_1 * 2] + normalColumnが 4 つで、10 になる
+		{"withStoringColumn2 : 4-2000", 4, withStoringColumn2, 2000, false},
+		{"withStoringColumn2 : 4-2001", 4, withStoringColumn2, 2001, true},
 	}
 
 	for _, tt := range cases {
